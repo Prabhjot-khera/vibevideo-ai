@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { UserIcon, KeyIcon, VideoIcon, ScissorsIcon, PaletteIcon } from 'lucide-react';
+import atlasService from '../services/atlasService';
 
 const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
   const [formData, setFormData] = useState({
@@ -94,27 +95,14 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
           return;
         }
         
-        // Check if user already exists (localStorage for now)
-        const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        const userExists = existingUsers.find(user => user.username === username || user.email === email);
+        // Register user with MongoDB Atlas
+        const registerResult = await atlasService.register(username, email, password);
         
-        if (userExists) {
+        if (!registerResult.success) {
           setLoginStatus('error');
-          setStatusMessage('Username or email already exists.');
+          setStatusMessage(registerResult.error || 'Registration failed.');
           return;
         }
-        
-        // Create new user
-        const newUser = {
-          id: Date.now(),
-          username,
-          email,
-          password, // In production, this would be hashed
-          createdAt: new Date().toISOString()
-        };
-        
-        existingUsers.push(newUser);
-        localStorage.setItem('users', JSON.stringify(existingUsers));
         
         console.log('Account created successfully');
         setLoginStatus('success');
@@ -129,7 +117,7 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
         }, 2000);
         
       } else {
-        // Handle login
+        // Handle login with MongoDB
         const { username, password } = formData;
         
         if (!username || !password) {
@@ -138,30 +126,33 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
           return;
         }
         
-        // Check user credentials (localStorage for now)
-        const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        const user = existingUsers.find(u => u.username === username && u.password === password);
+        // Authenticate with MongoDB Atlas
+        const loginResult = await atlasService.login(username, password);
         
-        if (user) {
-          console.log('Login successful');
+        if (loginResult.success) {
+          console.log('Atlas login successful:', loginResult.user);
           setLoginStatus('success');
-          setStatusMessage('Login successful! Welcome back.');
+          setStatusMessage('Login successful! Loading your data...');
           
-          // Store current user session
+          // Store current user session with Atlas data
           localStorage.setItem('currentUser', JSON.stringify({
-            id: user.id,
-            username: user.username,
-            email: user.email
+            username: loginResult.user.username,
+            email: loginResult.user.email,
+            createdAt: loginResult.user.createdAt
           }));
+          
+          // Store user's chats and library items
+          localStorage.setItem('userChats', JSON.stringify(loginResult.chats));
+          localStorage.setItem('userLibrary', JSON.stringify(loginResult.library_items));
           
           // Brief delay for user to see success message
           setTimeout(() => {
-            onLogin(user.username);
+            onLogin(loginResult.user.username, loginResult.chats, loginResult.library_items);
             onClose();
           }, 1000);
         } else {
           setLoginStatus('error');
-          setStatusMessage('Invalid username or password.');
+          setStatusMessage(loginResult.error || 'Invalid username or password.');
         }
       }
     } catch (error) {

@@ -6,23 +6,43 @@ const MessageInput = ({
   onSendMessage, 
   isLoading,
   onFileSelect,
-  currentFile
+  onMultipleFileSelect,
+  currentFile,
+  currentFiles
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      onFileSelect(file);
+    const files = Array.from(e.target.files);
+    console.log('📁 File input change:', {
+      fileCount: files.length,
+      fileNames: files.map(f => f.name),
+      files: files
+    });
+    if (files.length === 1) {
+      console.log('📁 Single file selected via file input');
+      onFileSelect(files[0]);
+    } else if (files.length > 1) {
+      console.log('📁 Multiple files selected via file input');
+      onMultipleFileSelect(files);
     }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      onFileSelect(file);
+    const files = Array.from(e.dataTransfer.files);
+    console.log('📁 Drag and drop files:', {
+      fileCount: files.length,
+      fileNames: files.map(f => f.name),
+      files: files
+    });
+    if (files.length === 1) {
+      console.log('📁 Single file selected via drag and drop');
+      onFileSelect(files[0]);
+    } else if (files.length > 1) {
+      console.log('📁 Multiple files selected via drag and drop');
+      onMultipleFileSelect(files);
     }
   };
 
@@ -56,7 +76,23 @@ const MessageInput = ({
           </div>
           
           <div className="flex-1">
-            {currentFile ? (
+            {currentFiles && currentFiles.length > 0 ? (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-gray-700">
+                  📁 {currentFiles.length} file{currentFiles.length > 1 ? 's' : ''} selected
+                </div>
+                <div className="space-y-1 max-h-20 overflow-y-auto">
+                  {currentFiles.map((file, index) => (
+                    <div key={index} className="flex items-center gap-2 text-xs text-gray-600">
+                      <span>• {file.name}</span>
+                      <span className="text-gray-400">
+                        ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : currentFile ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-gray-700">
                   📁 {currentFile.name}
@@ -68,10 +104,10 @@ const MessageInput = ({
             ) : (
               <div>
                 <p className="text-sm text-gray-600">
-                  {isDragOver ? 'Drop your file here' : 'Drag & drop a file or click to browse'}
+                  {isDragOver ? 'Drop your files here' : 'Drag & drop files or click to browse'}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Supports MP4, MOV, AVI, MP3, WAV, and more
+                  Supports MP4, MOV, AVI, MP3, WAV, and more. Select multiple files to merge.
                 </p>
               </div>
             )}
@@ -82,6 +118,7 @@ const MessageInput = ({
             <input
               type="file"
               accept="video/*,audio/*"
+              multiple
               onChange={handleFileChange}
               className="hidden"
             />

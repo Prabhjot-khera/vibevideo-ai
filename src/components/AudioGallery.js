@@ -6,67 +6,84 @@ const SimpleAudioPlayer = ({ file, isPlaying, onPlay, onPause }) => {
   const audioRef = useRef(null);
   const [audioUrl, setAudioUrl] = useState(null);
   const [error, setError] = useState(null);
+  const [audioElementReady, setAudioElementReady] = useState(false);
 
   useEffect(() => {
     if (file) {
-      console.log('🎵 SimpleAudioPlayer creating URL for file:', {
-        file,
+      console.log('🎵 [SimpleAudioPlayer] Creating URL for file:', {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
         isFile: file instanceof File,
         isBlob: file instanceof Blob,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        constructor: file.constructor.name
+        constructor: file.constructor.name,
+        hasId: !!file.id,
+        hasUploadTime: !!file.uploadTime
       });
+      
+      // Reset audio element ready state when file changes
+      setAudioElementReady(false);
       
       try {
         // Create object URL from the file
         const url = URL.createObjectURL(file);
-        console.log('🎵 Created audio URL:', url);
+        console.log('🎵 [SimpleAudioPlayer] Created audio URL:', url);
         setAudioUrl(url);
         
         return () => {
-          console.log('🎵 Revoking audio URL:', url);
+          console.log('🎵 [SimpleAudioPlayer] Revoking audio URL:', url);
           URL.revokeObjectURL(url);
+          setAudioElementReady(false);
         };
       } catch (error) {
-        console.error('🎵 Error creating audio URL:', error);
+        console.error('🎵 [SimpleAudioPlayer] Error creating audio URL:', error);
         setError('Failed to create audio URL: ' + error.message);
       }
     }
   }, [file]);
 
+  // Effect to handle play/pause when isPlaying changes
   useEffect(() => {
+    console.log('🎵 [SimpleAudioPlayer] isPlaying effect triggered:', {
+      isPlaying,
+      hasAudioRef: !!audioRef.current,
+      audioSrc: audioRef.current?.src
+    });
+    
     if (audioRef.current) {
-      console.log('🎵 SimpleAudioPlayer play/pause effect:', {
+      console.log('🎵 [SimpleAudioPlayer] Play/pause effect triggered:', {
         isPlaying,
         audioSrc: audioRef.current.src,
         readyState: audioRef.current.readyState,
         duration: audioRef.current.duration,
         paused: audioRef.current.paused,
-        currentTime: audioRef.current.currentTime
+        currentTime: audioRef.current.currentTime,
+        networkState: audioRef.current.networkState
       });
       
       if (isPlaying) {
-        console.log('🎵 Attempting to play audio...');
+        console.log('🎵 [SimpleAudioPlayer] Attempting to play audio...');
         
         // Add a small delay to ensure audio is fully loaded
         setTimeout(() => {
           if (audioRef.current) {
-            console.log('🎵 About to call play() on audio element');
-            console.log('🎵 Audio element state before play:', {
+            console.log('🎵 [SimpleAudioPlayer] About to call play() on audio element');
+            console.log('🎵 [SimpleAudioPlayer] Audio element state before play:', {
               readyState: audioRef.current.readyState,
               paused: audioRef.current.paused,
               duration: audioRef.current.duration,
-              src: audioRef.current.src
+              src: audioRef.current.src,
+              networkState: audioRef.current.networkState,
+              error: audioRef.current.error
             });
             
             // Check if audio is ready to play
             if (audioRef.current.readyState >= 3) { // HAVE_FUTURE_DATA or higher
+              console.log('🎵 [SimpleAudioPlayer] Audio is ready, calling play()');
               audioRef.current.play()
                 .then(() => {
-                  console.log('🎵 Audio play started successfully');
-                  console.log('🎵 Audio state after play:', {
+                  console.log('🎵 [SimpleAudioPlayer] ✅ Audio play started successfully');
+                  console.log('🎵 [SimpleAudioPlayer] Audio state after play:', {
                     paused: audioRef.current.paused,
                     currentTime: audioRef.current.currentTime,
                     duration: audioRef.current.duration,
@@ -74,23 +91,24 @@ const SimpleAudioPlayer = ({ file, isPlaying, onPlay, onPause }) => {
                   });
                 })
                 .catch(error => {
-                  console.error('🎵 Audio play failed:', error);
-                  console.error('🎵 Audio error details:', {
+                  console.error('🎵 [SimpleAudioPlayer] ❌ Audio play failed:', error);
+                  console.error('🎵 [SimpleAudioPlayer] Error details:', {
                     error: error.message,
                     name: error.name,
-                    code: error.code
+                    code: error.code,
+                    stack: error.stack
                   });
                 });
             } else {
-              console.log('🎵 Audio not ready to play yet, readyState:', audioRef.current.readyState);
+              console.log('🎵 [SimpleAudioPlayer] Audio not ready yet, readyState:', audioRef.current.readyState);
               // Wait for the audio to be ready
               const handleCanPlay = () => {
-                console.log('🎵 Audio is now ready, attempting to play');
+                console.log('🎵 [SimpleAudioPlayer] Audio is now ready, attempting to play');
                 audioRef.current.removeEventListener('canplay', handleCanPlay);
                 audioRef.current.play()
                   .then(() => {
-                    console.log('🎵 Audio play started successfully (after canplay)');
-                    console.log('🎵 Audio state after play:', {
+                    console.log('🎵 [SimpleAudioPlayer] ✅ Audio play started successfully (after canplay)');
+                    console.log('🎵 [SimpleAudioPlayer] Audio state after play:', {
                       paused: audioRef.current.paused,
                       currentTime: audioRef.current.currentTime,
                       duration: audioRef.current.duration,
@@ -98,11 +116,12 @@ const SimpleAudioPlayer = ({ file, isPlaying, onPlay, onPause }) => {
                     });
                   })
                   .catch(error => {
-                    console.error('🎵 Audio play failed (after canplay):', error);
-                    console.error('🎵 Audio error details:', {
+                    console.error('🎵 [SimpleAudioPlayer] ❌ Audio play failed (after canplay):', error);
+                    console.error('🎵 [SimpleAudioPlayer] Error details:', {
                       error: error.message,
                       name: error.name,
-                      code: error.code
+                      code: error.code,
+                      stack: error.stack
                     });
                   });
               };
@@ -111,42 +130,96 @@ const SimpleAudioPlayer = ({ file, isPlaying, onPlay, onPause }) => {
           }
         }, 100);
       } else {
-        audioRef.current.pause();
-        console.log('🎵 Audio paused');
+        console.log('🎵 [SimpleAudioPlayer] Pausing audio...');
+        if (audioRef.current) {
+          audioRef.current.pause();
+          console.log('🎵 [SimpleAudioPlayer] Audio paused');
+        }
       }
+    } else {
+      console.log('🎵 [SimpleAudioPlayer] Audio ref not ready yet, will retry when audio element is created');
     }
   }, [isPlaying]);
 
+  // Effect to handle play when audio element becomes available
+  useEffect(() => {
+    if (audioElementReady && audioRef.current && isPlaying) {
+      console.log('🎵 [SimpleAudioPlayer] Audio element became available, attempting to play');
+      console.log('🎵 [SimpleAudioPlayer] Audio element state:', {
+        readyState: audioRef.current.readyState,
+        paused: audioRef.current.paused,
+        duration: audioRef.current.duration,
+        src: audioRef.current.src
+      });
+      
+      // Try to play immediately if ready
+      if (audioRef.current.readyState >= 3) {
+        console.log('🎵 [SimpleAudioPlayer] Audio is ready, calling play() immediately');
+        audioRef.current.play()
+          .then(() => {
+            console.log('🎵 [SimpleAudioPlayer] ✅ Audio play started successfully (immediate)');
+          })
+          .catch(error => {
+            console.error('🎵 [SimpleAudioPlayer] ❌ Audio play failed (immediate):', error);
+          });
+      } else {
+        console.log('🎵 [SimpleAudioPlayer] Audio not ready yet, waiting for canplay event');
+        const handleCanPlay = () => {
+          console.log('🎵 [SimpleAudioPlayer] Audio is now ready (canplay), attempting to play');
+          audioRef.current.removeEventListener('canplay', handleCanPlay);
+          audioRef.current.play()
+            .then(() => {
+              console.log('🎵 [SimpleAudioPlayer] ✅ Audio play started successfully (canplay)');
+            })
+            .catch(error => {
+              console.error('🎵 [SimpleAudioPlayer] ❌ Audio play failed (canplay):', error);
+            });
+        };
+        audioRef.current.addEventListener('canplay', handleCanPlay);
+      }
+    }
+  }, [audioElementReady, isPlaying]);
+
   if (!file || !audioUrl) {
-    console.log('🎵 SimpleAudioPlayer not rendering:', { file: !!file, audioUrl: !!audioUrl });
+    console.log('🎵 [SimpleAudioPlayer] Not rendering:', { file: !!file, audioUrl: !!audioUrl });
     return null;
   }
 
-  console.log('🎵 SimpleAudioPlayer rendering audio element:', {
-    file: file.name,
+  console.log('🎵 [SimpleAudioPlayer] Rendering audio element:', {
+    fileName: file.name,
+    fileType: file.type,
+    fileSize: file.size,
     audioUrl,
     isPlaying
   });
 
   return (
     <audio
-      ref={audioRef}
+      ref={(ref) => {
+        audioRef.current = ref;
+        if (ref) {
+          console.log('🎵 [SimpleAudioPlayer] Audio element mounted, setting ready state');
+          setAudioElementReady(true);
+        }
+      }}
       src={audioUrl}
       preload="metadata"
       onEnded={() => onPause()}
       onError={(e) => {
-        console.error('🎵 Audio element error:', e);
-        console.error('🎵 Audio error details:', {
+        console.error('🎵 [SimpleAudioPlayer] ❌ Audio element error:', e);
+        console.error('🎵 [SimpleAudioPlayer] Error details:', {
           error: e.target.error,
+          errorCode: e.target.error?.code,
+          errorMessage: e.target.error?.message,
           networkState: e.target.networkState,
           readyState: e.target.readyState,
           src: e.target.src
         });
       }}
-      onLoadStart={() => console.log('🎵 Audio load started')}
+      onLoadStart={() => console.log('🎵 [SimpleAudioPlayer] Audio load started')}
       onLoadedData={() => {
-        console.log('🎵 Audio data loaded');
-        console.log('🎵 Audio loaded data state:', {
+        console.log('🎵 [SimpleAudioPlayer] Audio data loaded');
+        console.log('🎵 [SimpleAudioPlayer] Loaded data state:', {
           duration: audioRef.current.duration,
           readyState: audioRef.current.readyState,
           networkState: audioRef.current.networkState,
@@ -154,16 +227,16 @@ const SimpleAudioPlayer = ({ file, isPlaying, onPlay, onPause }) => {
         });
       }}
       onCanPlay={() => {
-        console.log('🎵 Audio can play');
-        console.log('🎵 Audio can play state:', {
+        console.log('🎵 [SimpleAudioPlayer] Audio can play');
+        console.log('🎵 [SimpleAudioPlayer] Can play state:', {
           duration: audioRef.current.duration,
           readyState: audioRef.current.readyState,
           paused: audioRef.current.paused
         });
       }}
       onLoadedMetadata={() => {
-        console.log('🎵 Audio metadata loaded');
-        console.log('🎵 Audio metadata state:', {
+        console.log('🎵 [SimpleAudioPlayer] Audio metadata loaded');
+        console.log('🎵 [SimpleAudioPlayer] Metadata state:', {
           duration: audioRef.current.duration,
           readyState: audioRef.current.readyState,
           src: audioRef.current.src
@@ -212,6 +285,19 @@ const AudioGallery = ({ audioFiles, onPlay, onPause, onDownload, onRemove, isPla
 
   // Get the currently playing file
   const currentPlayingFile = audioFiles.find(file => file.id === currentPlayingId);
+  
+  console.log('🎵 AudioGallery render state:', {
+    audioFilesCount: audioFiles.length,
+    currentPlayingId,
+    currentPlayingFile: currentPlayingFile ? {
+      id: currentPlayingFile.id,
+      name: currentPlayingFile.name,
+      type: currentPlayingFile.type,
+      isFile: currentPlayingFile instanceof File,
+      isBlob: currentPlayingFile instanceof Blob
+    } : null,
+    isPlaying
+  });
 
   return (
     <div className="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-gray-300/50 shadow-lg">
@@ -224,12 +310,17 @@ const AudioGallery = ({ audioFiles, onPlay, onPause, onDownload, onRemove, isPla
       
       {/* Hidden audio player for the currently playing file */}
       {currentPlayingFile && (
-        <SimpleAudioPlayer 
-          file={currentPlayingFile} 
-          isPlaying={isPlaying} 
-          onPlay={onPlay} 
-          onPause={onPause} 
-        />
+        <div>
+          <div style={{ fontSize: '10px', color: '#666', marginBottom: '5px' }}>
+            Debug: Playing file - {currentPlayingFile.name} (Type: {currentPlayingFile.type})
+          </div>
+          <SimpleAudioPlayer 
+            file={currentPlayingFile} 
+            isPlaying={isPlaying} 
+            onPlay={onPlay} 
+            onPause={onPause} 
+          />
+        </div>
       )}
       
       <div className="space-y-1 max-h-20 overflow-y-auto">
@@ -266,15 +357,23 @@ const AudioGallery = ({ audioFiles, onPlay, onPause, onDownload, onRemove, isPla
               key={file.id || index}
               className="flex items-center gap-1.5 p-1.5 bg-gray-50/80 rounded-md border border-gray-200/50 hover:bg-gray-100/80 transition-colors cursor-pointer group"
               onClick={() => {
-                console.log('🎵 Gallery play/pause clicked:', {
-                  file,
-                  isCurrentlyPlaying,
+                console.log('🎵 [AudioGallery] Play/pause clicked:', {
+                  fileName: file.name,
+                  fileType: file.type,
+                  fileSize: file.size,
                   fileId: file.id,
-                  currentPlayingId
+                  isCurrentlyPlaying,
+                  currentPlayingId,
+                  isFile: file instanceof File,
+                  isBlob: file instanceof Blob,
+                  hasUploadTime: !!file.uploadTime,
+                  hasOriginalName: !!file.originalName
                 });
                 if (isCurrentlyPlaying) {
+                  console.log('🎵 [AudioGallery] Calling onPause');
                   onPause();
                 } else {
+                  console.log('🎵 [AudioGallery] Calling onPlay with file:', file);
                   onPlay(file);
                 }
               }}

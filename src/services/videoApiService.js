@@ -261,6 +261,165 @@ class VideoApiService {
       return false;
     }
   }
+
+  // Process multiple files for merging
+  static async processMultipleFiles(files, command = 'merge', order = null) {
+    try {
+      console.log('Processing multiple files for merge:', {
+        fileCount: files.length,
+        command,
+        order,
+        fileNames: files.map(f => f.name)
+      });
+
+      // Try /merge endpoint first
+      let response = await this.tryMergeEndpoint(files, order);
+      
+      // If /merge fails with 404, try /process with command=merge
+      if (!response || response.status === 404) {
+        console.log('Merge endpoint not available, trying /process with command=merge');
+        response = await this.tryProcessMergeEndpoint(files, order);
+      }
+
+      if (!response) {
+        return {
+          success: false,
+          error: 'Failed to process files - no valid endpoint found'
+        };
+      }
+
+      if (response.status === 200) {
+        const processedFileBlob = await response.blob();
+        
+        console.log('Received merged file from backend:', {
+          size: processedFileBlob.size,
+          type: processedFileBlob.type
+        });
+
+        if (processedFileBlob.size === 0) {
+          return {
+            success: false,
+            error: 'Received empty file from server. Merge may have failed.'
+          };
+        }
+
+        // Determine file type based on the first file
+        const firstFile = files[0];
+        let fileType = firstFile.type;
+        
+        // Since backend sends as application/octet-stream, guess from filename
+        const contentDisposition = response.headers.get('content-disposition');
+        let fileName = firstFile.name?.toLowerCase() || '';
+        
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+          if (filenameMatch && filenameMatch[1]) {
+            fileName = filenameMatch[1].replace(/['"]/g, '').toLowerCase();
+          }
+        }
+
+        // Guess file type from extension
+        if (fileName.endsWith('.m4a')) {
+          fileType = 'audio/mp4';
+        } else if (fileName.endsWith('.mp3')) {
+          fileType = 'audio/mpeg';
+        } else if (fileName.endsWith('.wav')) {
+          fileType = 'audio/wav';
+        } else if (fileName.endsWith('.mp4')) {
+          fileType = 'video/mp4';
+        } else if (fileName.endsWith('.mov')) {
+          fileType = 'video/quicktime';
+        }
+
+        const processedFile = new File([processedFileBlob], `merged_${firstFile.name}`, {
+          type: fileType
+        });
+
+        console.log('Created merged file:', {
+          name: processedFile.name,
+          type: processedFile.type,
+          size: processedFile.size
+        });
+
+        return {
+          success: true,
+          processedFile: processedFile,
+          message: 'Files merged successfully!'
+        };
+      } else {
+        const errorText = await response.text();
+        console.error('Merge processing error:', errorText);
+        return {
+          success: false,
+          error: `Merge failed: ${response.status} - ${errorText}`
+        };
+      }
+    } catch (error) {
+      console.error('Error processing multiple files:', error);
+      return {
+        success: false,
+        error: `Error processing files: ${error.message}`
+      };
+    }
+  }
+
+  // Try the /merge endpoint
+  static async tryMergeEndpoint(files, order) {
+    try {
+      const formData = new FormData();
+      
+      // Add files as 'files' field (multiple)
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+      
+      formData.append('message', 'merge');
+      if (order) {
+        formData.append('order', order);
+      }
+
+      console.log('Trying /merge endpoint');
+      const response = await fetch(`${API_BASE_URL}/merge`, {
+        method: 'POST',
+        body: formData,
+        timeout: 180000 // 3 minutes for merge operations
+      });
+
+      return response;
+    } catch (error) {
+      console.error('Error with /merge endpoint:', error);
+      return null;
+    }
+  }
+
+  // Try the /process endpoint with command=merge
+  static async tryProcessMergeEndpoint(files, order) {
+    try {
+      const formData = new FormData();
+      
+      // Add files as 'file' field (multiple)
+      files.forEach(file => {
+        formData.append('file', file);
+      });
+      
+      formData.append('command', 'merge');
+      if (order) {
+        formData.append('order', order);
+      }
+
+      console.log('Trying /process endpoint with command=merge');
+      const response = await fetch(`${API_BASE_URL}/process`, {
+        method: 'POST',
+        body: formData,
+        timeout: 180000 // 3 minutes for merge operations
+      });
+
+      return response;
+    } catch (error) {
+      console.error('Error with /process merge endpoint:', error);
+      return null;
+    }
+  }
 }
 
 export default VideoApiService;

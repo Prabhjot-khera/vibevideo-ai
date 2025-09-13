@@ -1,5 +1,5 @@
 import React from 'react';
-import logoImage from '../images/logo.png';
+import logoImage from '../images/newLogo.png';
 
 const Header = ({ isSidebarOpen, onToggleSidebar, currentFile }) => {
   return (
@@ -33,7 +33,7 @@ const Header = ({ isSidebarOpen, onToggleSidebar, currentFile }) => {
           <img 
             src={logoImage} 
             alt="Video Editor AI Logo" 
-            className="h-12 w-auto object-contain"
+            className="h-16 w-auto object-contain"
           />
         </div>
       </div>

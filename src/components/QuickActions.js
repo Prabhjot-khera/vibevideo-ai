@@ -6,12 +6,13 @@ const QuickActions = ({ onActionClick }) => {
     { id: 'speed-up', title: 'Speed Up', description: '2x, 1.5x, etc.', icon: '⚡', color: 'from-yellow-500 to-orange-500', glow: 'glow-gray' },
     { id: 'cut-video', title: 'Cut Video', description: 'Time intervals', icon: '✂️', color: 'from-red-500 to-pink-500', glow: 'glow-gray' },
     { id: 'grayscale', title: 'Grayscale', description: 'B&W conversion', icon: '🎨', color: 'from-gray-500 to-gray-600', glow: 'glow-gray' },
-    { id: 'enhance-audio', title: 'Enhance Audio', description: 'Remove noise', icon: '🎵', color: 'from-purple-500 to-indigo-500', glow: 'glow-gray' }
+    { id: 'enhance-audio', title: 'Enhance Audio', description: 'Remove noise', icon: '🎵', color: 'from-purple-500 to-indigo-500', glow: 'glow-gray' },
+    { id: 'merge', title: 'Merge Files', description: 'Combine multiple files', icon: '🔗', color: 'from-green-500 to-teal-500', glow: 'glow-gray' }
   ];
 
   return (
     <div className="mt-2 relative z-30">
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-6 gap-2">
         {actions.map((action) => (
           <button
             key={action.id}

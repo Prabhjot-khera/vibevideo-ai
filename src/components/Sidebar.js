@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserIcon, LogOutIcon } from 'lucide-react';
 
-const Sidebar = ({ isOpen, onToggle, onNewChat, conversations, user, onProfileClick, onLogout }) => {
+const Sidebar = ({ isOpen, onToggle, onNewChat, conversations, onChatSelect, currentChatId, user, onProfileClick, onLogout }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   return (
     <div className={`${isOpen ? 'w-64' : 'w-0'} transition-all duration-300 bg-gray-900/90 backdrop-blur-xl text-white overflow-hidden border-r border-white/20`}>
@@ -37,16 +37,33 @@ const Sidebar = ({ isOpen, onToggle, onNewChat, conversations, user, onProfileCl
         <div className="flex-1 overflow-y-auto px-4">
           <h3 className="text-sm font-medium text-gray-400 mb-3">Recent Conversations</h3>
           <div className="space-y-2">
-            {conversations.map((conversation, index) => (
-              <div key={index} className="p-3 hover:bg-white/5 rounded-lg cursor-pointer transition-all duration-300 hover-lift border border-transparent hover:border-white/20 group">
-                <div className="font-medium text-sm truncate text-gray-200 group-hover:text-white transition-colors">
-                  {conversation.title}
-                </div>
-                <div className="text-xs text-gray-400 truncate mt-1 group-hover:text-gray-300 transition-colors">
-                  {conversation.preview}
-                </div>
+            {conversations.length === 0 ? (
+              <div className="p-3 text-center text-gray-400 text-sm">
+                No conversations yet
               </div>
-            ))}
+            ) : (
+              conversations.map((conversation) => (
+                <div 
+                  key={conversation.id} 
+                  onClick={() => onChatSelect(conversation.id)}
+                  className={`p-3 hover:bg-white/5 rounded-lg cursor-pointer transition-all duration-300 hover-lift border ${
+                    currentChatId === conversation.id 
+                      ? 'bg-white/10 border-white/30' 
+                      : 'border-transparent hover:border-white/20'
+                  } group`}
+                >
+                  <div className="font-medium text-sm truncate text-gray-200 group-hover:text-white transition-colors">
+                    {conversation.title}
+                  </div>
+                  <div className="text-xs text-gray-400 truncate mt-1 group-hover:text-gray-300 transition-colors">
+                    {conversation.preview}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {new Date(conversation.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
