@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import DownloadButton from './DownloadButton';
-import VideoPlayer from './VideoPlayer';
 
 function base64ToBlob(b64, mime = 'application/octet-stream') {
   // Handles both "data:...;base64,XXXX" and raw base64
@@ -157,13 +156,15 @@ const Message = ({ message, formatTime }) => {
                   </div>
                 )}
 
-                {/* Video player */}
+                {/* Video file info - no player, just download */}
                 {norm?.kind === 'video' && norm.fileForPlayer && (
-                  <div>
+                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                     <p className="text-xs text-gray-500 mb-2">
-                      🎬 Video Player{norm.type ? ` (Type: ${norm.type})` : ''}:
+                      🎬 Video File{norm.type ? ` (Type: ${norm.type})` : ''}:
                     </p>
-                    <VideoPlayer file={norm.fileForPlayer} className="w-full" />
+                    <p className="text-sm text-gray-600">
+                      Your processed video file is ready! Use the Video Gallery below to play it.
+                    </p>
                   </div>
                 )}
 

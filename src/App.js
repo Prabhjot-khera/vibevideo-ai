@@ -3,7 +3,6 @@ import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
 import { 
   Sidebar, 
   MessageList, 
-  QuickActions, 
   MessageInput, 
   Header,
   ParticleBackground,
@@ -13,7 +12,6 @@ import {
 import Login from './components/login';
 import useMessages from './hooks/useMessages';
 import VideoApiService from './services/videoApiService';
-import atlasService from './services/atlasService';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -92,25 +90,9 @@ function App() {
           : chat
       ));
       
-      // Save to MongoDB Atlas
+      // Chat data is stored in local component state
       if (user) {
-        try {
-          const chatData = {
-            title: updatedChat.title,
-            messages: messages.map(msg => ({
-              sender: msg.sender,
-              text: msg.content || msg.text,
-              timestamp: new Date()
-            })),
-            audioFiles: audioFiles,
-            videoFiles: videoFiles
-          };
-          
-          await atlasService.saveChat(user, chatData);
-          console.log('Chat saved to Atlas');
-        } catch (error) {
-          console.error('Failed to save chat to Atlas:', error);
-        }
+        console.log('Chat updated in local state');
       }
     }
   }, [currentChatId, audioFiles, videoFiles, user]);
@@ -127,7 +109,7 @@ function App() {
       ));
     }
   }, [currentChatId]);
-
+  
   const {
     messages,
     setMessages,
@@ -156,8 +138,53 @@ function App() {
       setIsLoading(true);
       
       try {
-        if (currentFile) {
-          // If there's a file, process it with the message
+        // Check if user wants to merge multiple files
+        if (currentFiles && currentFiles.length > 1 && userMessage.toLowerCase().includes('merge')) {
+          addMessage('Merging files...', 'assistant');
+          
+          const result = await VideoApiService.processMultipleFiles(currentFiles, 'merge');
+          
+          if (result.success) {
+            // Add the merged file to the appropriate gallery
+            const mergedFile = result.processedFile;
+            
+            // Create a new File object with additional properties
+            const fileWithId = new File([mergedFile], mergedFile.name, {
+              type: mergedFile.type,
+              lastModified: Date.now()
+            });
+            
+            // Add additional properties to the File object
+            fileWithId.id = Date.now() + Math.random();
+            fileWithId.uploadTime = new Date();
+            fileWithId.originalName = mergedFile.name;
+            fileWithId.fileSize = mergedFile.size || 0;
+            fileWithId.mimeType = mergedFile.type || 'application/octet-stream';
+            
+            if (mergedFile.type.startsWith('video/')) {
+              setVideoFiles(prev => [...prev, fileWithId]);
+              addFileToCurrentChat(fileWithId, 'video');
+              addMessage(`✅ Video merged successfully! Check the Video Gallery below.`, 'assistant');
+            } else if (mergedFile.type.startsWith('audio/')) {
+              setAudioFiles(prev => [...prev, fileWithId]);
+              addFileToCurrentChat(fileWithId, 'audio');
+              addMessage(`✅ Audio merged successfully! Check the Audio Gallery below.`, 'assistant');
+            } else {
+              // Fallback - add to both galleries
+              setVideoFiles(prev => [...prev, fileWithId]);
+              setAudioFiles(prev => [...prev, fileWithId]);
+              addFileToCurrentChat(fileWithId, 'video');
+              addFileToCurrentChat(fileWithId, 'audio');
+              addMessage(`✅ Files merged successfully! Check the galleries below.`, 'assistant');
+            }
+            
+            // Clear the current files after merging
+            setCurrentFiles([]);
+          } else {
+            addMessage(`❌ Merge failed: ${result.error}`, 'assistant');
+          }
+        } else if (currentFile) {
+          // If there's a single file, process it with the message
           const response = await VideoApiService.processFile(currentFile, userMessage);
           
           if (response.success) {
@@ -197,45 +224,17 @@ function App() {
                 setAudioFiles(prev => [...prev, fileWithId]);
                 addFileToCurrentChat(fileWithId, 'audio');
                 
-                // Save to MongoDB Atlas
+                // Audio file stored in local state
                 if (user) {
-                  try {
-                    const libraryItem = {
-                      fileName: processedFileName,
-                      fileType: response.processedFile.type || 'application/octet-stream',
-                      fileSize: response.processedFile.size || 0,
-                      originalName: processedFileName,
-                      mimeType: response.processedFile.type || 'application/octet-stream',
-                      fileData: await atlasService.fileToBase64(response.processedFile)
-                    };
-                    
-                    await atlasService.saveLibraryItem(user, libraryItem);
-                    console.log('Audio file saved to Atlas');
-                  } catch (error) {
-                    console.error('Failed to save audio file to Atlas:', error);
-                  }
+                  console.log('Audio file processed and stored locally');
                 }
               } else if (response.processedFile.type?.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv)$/i.test(processedFileName)) {
                 setVideoFiles(prev => [...prev, fileWithId]);
                 addFileToCurrentChat(fileWithId, 'video');
                 
-                // Save to MongoDB Atlas
+                // Video file stored in local state
                 if (user) {
-                  try {
-                    const libraryItem = {
-                      fileName: processedFileName,
-                      fileType: response.processedFile.type || 'application/octet-stream',
-                      fileSize: response.processedFile.size || 0,
-                      originalName: processedFileName,
-                      mimeType: response.processedFile.type || 'application/octet-stream',
-                      fileData: await atlasService.fileToBase64(response.processedFile)
-                    };
-                    
-                    await atlasService.saveLibraryItem(user, libraryItem);
-                    console.log('Video file saved to Atlas');
-                  } catch (error) {
-                    console.error('Failed to save video file to Atlas:', error);
-                  }
+                  console.log('Video file processed and stored locally');
                 }
               }
             } else {
@@ -460,7 +459,7 @@ function App() {
     console.log('User logged in:', username);
     console.log('Loading user data:', { chats: userChats.length, library: userLibrary.length });
     
-    // Load user's chats from MongoDB
+    // Load user's chats from login data
     if (userChats && userChats.length > 0) {
       const formattedChats = userChats.map(chat => ({
         id: chat._id.toString(),
@@ -549,27 +548,11 @@ function App() {
   };
 
 
+
   const handleFileSelect = async (file) => {
     setCurrentFile(file);
     setCurrentFiles([]); // Clear multiple files when single file is selected
     addMessage(`File uploaded: ${file.name}`, 'assistant');
-    
-    // Generate suggestions based on the uploaded file
-    setTimeout(async () => {
-      try {
-        const suggestions = [
-          'Speed up the video',
-          'Cut specific segments', 
-          'Convert to grayscale',
-          'Enhance audio quality',
-          'Remove background noise',
-          'Combine with other clips'
-        ];
-        addMessage(`Here are some things I can help you do with "${file.name}":\n\n• ${suggestions.join('\n• ')}`, 'assistant');
-      } catch (error) {
-        console.error('❌ Error generating suggestions:', error);
-      }
-    }, 1000);
   };
 
   const handleMultipleFileSelect = async (files) => {
@@ -591,184 +574,8 @@ function App() {
     });
     
     addMessage(`${files.length} files uploaded: ${files.map(f => f.name).join(', ')}`, 'assistant');
-    
-    // Generate suggestions for multiple files
-    setTimeout(async () => {
-      try {
-        const suggestions = [
-          'Merge files together',
-          'Create a compilation',
-          'Combine audio tracks',
-          'Stitch videos together'
-        ];
-        addMessage(`Here are some things I can help you do with these ${files.length} files:\n\n• ${suggestions.join('\n• ')}`, 'assistant');
-      } catch (error) {
-        console.error('❌ Error generating suggestions:', error);
-      }
-    }, 1000);
   };
 
-  const handleActionClick = async (actionId) => {
-    console.log('🔘 Action clicked:', {
-      actionId,
-      currentFiles: currentFiles,
-      currentFile: currentFile,
-      hasCurrentFiles: !!currentFiles,
-      currentFilesLength: currentFiles?.length || 0
-    });
-    
-    const actionMessages = {
-      'transcript': 'transcript',
-      'speed-up': 'Speed up video by 2x',
-      'cut-video': 'Cut video from 0:30 to 2:15',
-      'grayscale': 'Convert to grayscale',
-      'enhance-audio': 'Remove background noise',
-      'merge': 'merge'
-    };
-    
-    const actionMessage = actionMessages[actionId];
-    addMessage(actionMessage, 'user');
-    
-    // Process the action with API
-    setIsLoading(true);
-    try {
-      console.log('⚡ Processing action:', actionMessage);
-      
-      if (actionId === 'merge' && currentFiles && currentFiles.length > 1) {
-        console.log('🔗 Merge action triggered with multiple files:', {
-          currentFiles: currentFiles,
-          fileCount: currentFiles.length,
-          fileNames: currentFiles.map(f => f.name)
-        });
-        // Handle merge action with multiple files
-        const response = await VideoApiService.processMultipleFiles(currentFiles, 'merge');
-        
-        if (response.success) {
-          if (response.processedFile) {
-            const processedFileName = `merged_${currentFiles[0].name}`;
-            addMessage(`✅ Files merged successfully! Your combined file is ready.`, 'assistant', {
-              processedFile: response.processedFile,
-              processedFileName: processedFileName
-            });
-            console.log('Merged file:', response.processedFile);
-            
-            // Add merged file to appropriate gallery
-            const fileWithId = new File([response.processedFile], processedFileName, {
-              type: response.processedFile.type || 'application/octet-stream',
-              lastModified: Date.now()
-            });
-            
-            // Add additional properties to the File object
-            fileWithId.id = Date.now() + Math.random();
-            fileWithId.uploadTime = new Date();
-            fileWithId.originalName = processedFileName;
-            fileWithId.fileSize = response.processedFile.size || 0;
-            fileWithId.mimeType = response.processedFile.type || 'application/octet-stream';
-            
-            console.log('Created fileWithId (merge):', {
-              name: fileWithId.name,
-              type: fileWithId.type,
-              size: fileWithId.size,
-              isFile: fileWithId instanceof File,
-              isBlob: fileWithId instanceof Blob,
-              id: fileWithId.id
-            });
-            
-            // Determine if it's audio or video based on file type or name
-            if (response.processedFile.type?.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|aac)$/i.test(processedFileName)) {
-              setAudioFiles(prev => [...prev, fileWithId]);
-              addFileToCurrentChat(fileWithId, 'audio');
-            } else if (response.processedFile.type?.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv)$/i.test(processedFileName)) {
-              setVideoFiles(prev => [...prev, fileWithId]);
-              addFileToCurrentChat(fileWithId, 'video');
-            }
-          } else {
-            addMessage(`⚠️ ${actionMessage} was received, but the server couldn't process the files. This might be a temporary issue. Please try again or contact support if the problem persists.`, 'assistant');
-            console.log('API response without file:', response);
-          }
-        } else {
-          addMessage(`❌ ${actionMessage} failed: ${response.error}`, 'assistant');
-          console.error('Action processing error:', response.error);
-        }
-      } else if (currentFile) {
-        // If there's a file, process it with the action
-        const response = await VideoApiService.processFile(currentFile, actionMessage);
-        
-        if (response.success) {
-          if (response.processedFile) {
-            const processedFileName = `processed_${currentFile.name}`;
-            addMessage(`✅ ${actionMessage} completed! Your processed file is ready.`, 'assistant', {
-              processedFile: response.processedFile,
-              processedFileName: processedFileName
-            });
-            console.log('Processed file:', response.processedFile);
-            
-            // Add processed file to appropriate gallery
-            // Create a new File object with additional properties
-            const fileWithId = new File([response.processedFile], processedFileName, {
-              type: response.processedFile.type || 'application/octet-stream',
-              lastModified: Date.now()
-            });
-            
-            // Add additional properties to the File object
-            fileWithId.id = Date.now() + Math.random();
-            fileWithId.uploadTime = new Date();
-            fileWithId.originalName = processedFileName;
-            fileWithId.fileSize = response.processedFile.size || 0;
-            fileWithId.mimeType = response.processedFile.type || 'application/octet-stream';
-            
-            console.log('Created fileWithId (action):', {
-              name: fileWithId.name,
-              type: fileWithId.type,
-              size: fileWithId.size,
-              isFile: fileWithId instanceof File,
-              isBlob: fileWithId instanceof Blob,
-              id: fileWithId.id
-            });
-            
-            // Determine if it's audio or video based on file type or name
-            if (response.processedFile.type?.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|aac)$/i.test(processedFileName)) {
-              setAudioFiles(prev => [...prev, fileWithId]);
-              addFileToCurrentChat(fileWithId, 'audio');
-            } else if (response.processedFile.type?.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv)$/i.test(processedFileName)) {
-              setVideoFiles(prev => [...prev, fileWithId]);
-              addFileToCurrentChat(fileWithId, 'video');
-            }
-          } else {
-            // API returned success but no file - might be a server issue
-            addMessage(`⚠️ ${actionMessage} was received, but the server couldn't process the file. This might be a temporary issue. Please try again or contact support if the problem persists.`, 'assistant');
-            console.log('API response without file:', response);
-          }
-        } else {
-          addMessage(`❌ Error processing file: ${response.error}`, 'assistant');
-        }
-      } else if (actionId === 'merge') {
-        // Merge action clicked but no multiple files selected
-        console.log('🔗 Merge action clicked but no multiple files:', {
-          currentFiles: currentFiles,
-          currentFile: currentFile,
-          hasCurrentFiles: !!currentFiles,
-          currentFilesLength: currentFiles?.length || 0
-        });
-        addMessage(`❌ Please select multiple files to merge. Upload 2 or more files first.`, 'assistant');
-      } else {
-        // If no file, just send the message
-        const response = await VideoApiService.sendMessage(actionMessage);
-        
-        if (response.success) {
-          const aiResponse = response.data?.message || response.data?.response || `I'll help you ${actionMessage.toLowerCase()}. Please upload a file to process.`;
-          addMessage(aiResponse, 'assistant');
-        } else {
-          addMessage(`❌ Error: ${response.error}`, 'assistant');
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error processing action:', error);
-      addMessage("I'm sorry, I encountered an error processing your request. Please try again.", 'assistant');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="relative flex h-screen overflow-hidden">
@@ -802,15 +609,15 @@ function App() {
           />
 
 
-          {/* Toggle Button for Sections */}
+          {/* Toggle Button for Galleries */}
           <div className="border-t border-gray-300 bg-gray-200/70 p-2 flex justify-center">
             <button
               onClick={() => setShowSections(!showSections)}
               className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-              title={showSections ? 'Hide Actions & Galleries' : 'Show Actions & Galleries'}
+              title={showSections ? 'Hide Galleries' : 'Show Galleries'}
             >
               <span className="font-medium">
-                {showSections ? 'Hide Actions & Galleries' : 'Show Actions & Galleries'}
+                {showSections ? 'Hide Galleries' : 'Show Galleries'}
               </span>
               {showSections ? (
                 <ChevronDownIcon className="w-4 h-4" />
@@ -820,38 +627,27 @@ function App() {
             </button>
           </div>
 
-          {/* Quick Actions and Galleries - conditionally rendered */}
+          {/* File Galleries - conditionally rendered */}
           {showSections && (
-            <>
-              <div className="border-t border-gray-300 bg-gray-200/70 p-4">
-                <QuickActions onActionClick={handleActionClick} />
+            <div className="border-t border-gray-300 bg-gray-100/50 p-4 space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <AudioGallery
+                  audioFiles={audioFiles}
+                  onPlay={handlePlay}
+                  onPause={handlePause}
+                  onDownload={handleDownload}
+                  onRemove={handleRemove}
+                  isPlaying={isPlaying}
+                  currentPlayingId={currentPlayingId}
+                />
+                <VideoGallery
+                  videoFiles={videoFiles}
+                  onDownload={handleDownload}
+                  onRemove={handleRemove}
+                  onPreview={handlePreview}
+                />
               </div>
-
-              {/* File Galleries */}
-              <div className="border-t border-gray-300 bg-gray-100/50 p-4 space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <AudioGallery
-                    audioFiles={audioFiles}
-                    onPlay={handlePlay}
-                    onPause={handlePause}
-                    onDownload={handleDownload}
-                    onRemove={handleRemove}
-                    isPlaying={isPlaying}
-                    currentPlayingId={currentPlayingId}
-                  />
-                  <VideoGallery
-                    videoFiles={videoFiles}
-                    onPlay={handlePlay}
-                    onPause={handlePause}
-                    onDownload={handleDownload}
-                    onRemove={handleRemove}
-                    onPreview={handlePreview}
-                    isPlaying={isPlaying}
-                    currentPlayingId={currentPlayingId}
-                  />
-                </div>
-              </div>
-            </>
+            </div>
           )}
 
           <MessageInput

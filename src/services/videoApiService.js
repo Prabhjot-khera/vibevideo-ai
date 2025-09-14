@@ -303,7 +303,7 @@ class VideoApiService {
           };
         }
 
-        // Determine file type based on the first file
+        // Determine file type based on the input files
         const firstFile = files[0];
         let fileType = firstFile.type;
         
@@ -318,20 +318,72 @@ class VideoApiService {
           }
         }
 
-        // Guess file type from extension
-        if (fileName.endsWith('.m4a')) {
-          fileType = 'audio/mp4';
-        } else if (fileName.endsWith('.mp3')) {
-          fileType = 'audio/mpeg';
-        } else if (fileName.endsWith('.wav')) {
-          fileType = 'audio/wav';
-        } else if (fileName.endsWith('.mp4')) {
-          fileType = 'video/mp4';
-        } else if (fileName.endsWith('.mov')) {
-          fileType = 'video/quicktime';
+        // Check if any of the input files are video files
+        const hasVideoFiles = files.some(file => 
+          file.type?.startsWith('video/') || 
+          /\.(mp4|mov|avi|webm|mkv)$/i.test(file.name)
+        );
+        
+        const hasAudioFiles = files.some(file => 
+          file.type?.startsWith('audio/') || 
+          /\.(mp3|wav|m4a|ogg|aac)$/i.test(file.name)
+        );
+
+        // Determine output file type based on input files
+        if (hasVideoFiles) {
+          // If any input is video, output should be video
+          if (fileName.endsWith('.mp4')) {
+            fileType = 'video/mp4';
+          } else if (fileName.endsWith('.mov')) {
+            fileType = 'video/quicktime';
+          } else if (fileName.endsWith('.avi')) {
+            fileType = 'video/x-msvideo';
+          } else if (fileName.endsWith('.webm')) {
+            fileType = 'video/webm';
+          } else {
+            // Default to mp4 for video
+            fileType = 'video/mp4';
+          }
+        } else if (hasAudioFiles) {
+          // If only audio files, output should be audio
+          if (fileName.endsWith('.m4a')) {
+            fileType = 'audio/mp4';
+          } else if (fileName.endsWith('.mp3')) {
+            fileType = 'audio/mpeg';
+          } else if (fileName.endsWith('.wav')) {
+            fileType = 'audio/wav';
+          } else {
+            // Default to mp4 for audio
+            fileType = 'audio/mp4';
+          }
+        } else {
+          // Fallback to original logic
+          if (fileName.endsWith('.m4a')) {
+            fileType = 'audio/mp4';
+          } else if (fileName.endsWith('.mp3')) {
+            fileType = 'audio/mpeg';
+          } else if (fileName.endsWith('.wav')) {
+            fileType = 'audio/wav';
+          } else if (fileName.endsWith('.mp4')) {
+            fileType = 'video/mp4';
+          } else if (fileName.endsWith('.mov')) {
+            fileType = 'video/quicktime';
+          }
         }
 
-        const processedFile = new File([processedFileBlob], `merged_${firstFile.name}`, {
+        // Generate appropriate filename based on file type
+        let mergedFileName;
+        if (hasVideoFiles) {
+          const baseName = firstFile.name.replace(/\.[^/.]+$/, ""); // Remove extension
+          mergedFileName = `merged_${baseName}.mp4`; // Default to mp4 for video
+        } else if (hasAudioFiles) {
+          const baseName = firstFile.name.replace(/\.[^/.]+$/, ""); // Remove extension
+          mergedFileName = `merged_${baseName}.m4a`; // Default to m4a for audio
+        } else {
+          mergedFileName = `merged_${firstFile.name}`;
+        }
+
+        const processedFile = new File([processedFileBlob], mergedFileName, {
           type: fileType
         });
 

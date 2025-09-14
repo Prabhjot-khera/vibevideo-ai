@@ -1,7 +1,7 @@
 import React from 'react';
-import { PlayIcon, PauseIcon, DownloadIcon, TrashIcon, EyeIcon } from 'lucide-react';
+import { PlayIcon, DownloadIcon, TrashIcon, EyeIcon } from 'lucide-react';
 
-const VideoGallery = ({ videoFiles, onPlay, onPause, onDownload, onRemove, onPreview, isPlaying, currentPlayingId }) => {
+const VideoGallery = ({ videoFiles, onDownload, onRemove, onPreview }) => {
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -10,11 +10,151 @@ const VideoGallery = ({ videoFiles, onPlay, onPause, onDownload, onRemove, onPre
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const formatDuration = (duration) => {
-    if (!duration || !isFinite(duration)) return '--:--';
-    const minutes = Math.floor(duration / 60);
-    const seconds = Math.floor(duration % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+  // Function to open video in popup window
+  const openVideoInPopup = (file) => {
+    console.log('Opening video in popup:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      isFile: file instanceof File,
+      isBlob: file instanceof Blob
+    });
+    
+    const videoUrl = URL.createObjectURL(file);
+    console.log('Created video URL:', videoUrl);
+    
+    const popup = window.open('', '_blank', 'width=900,height=700,scrollbars=yes,resizable=yes');
+    
+    if (popup) {
+      popup.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Video Player - ${file.name}</title>
+          <style>
+            body {
+              margin: 0;
+              padding: 20px;
+              background: #000;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              min-height: 100vh;
+              font-family: Arial, sans-serif;
+            }
+            .video-container {
+              max-width: 100%;
+              max-height: 100%;
+              position: relative;
+            }
+            video {
+              max-width: 100%;
+              max-height: 100%;
+              border-radius: 8px;
+              background: #000;
+            }
+            .video-info {
+              color: white;
+              text-align: center;
+              margin-top: 10px;
+            }
+            .close-btn {
+              position: absolute;
+              top: 10px;
+              right: 10px;
+              background: rgba(255,255,255,0.2);
+              border: none;
+              color: white;
+              padding: 8px 12px;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 14px;
+              z-index: 10;
+            }
+            .close-btn:hover {
+              background: rgba(255,255,255,0.3);
+            }
+            .loading {
+              color: white;
+              text-align: center;
+              margin-top: 20px;
+            }
+          </style>
+        </head>
+        <body>
+          <button class="close-btn" onclick="window.close()">Close</button>
+          <div class="video-container">
+            <video id="videoPlayer" controls preload="metadata" style="width: 100%; height: auto;">
+              <source src="${videoUrl}" type="${file.type || 'video/mp4'}">
+              <source src="${videoUrl}" type="video/quicktime">
+              <source src="${videoUrl}" type="video/x-msvideo">
+              <source src="${videoUrl}" type="video/webm">
+              Your browser does not support the video tag.
+            </video>
+            <div class="video-info">
+              <h3>${file.name}</h3>
+              <p>Size: ${formatFileSize(file.size || file.fileSize || 0)}</p>
+            </div>
+            <div class="loading" id="loading">Loading video...</div>
+          </div>
+          
+          <script>
+            const video = document.getElementById('videoPlayer');
+            const loading = document.getElementById('loading');
+            
+            console.log('Video element:', video);
+            console.log('Video src:', video.src);
+            console.log('Video sources:', video.querySelectorAll('source'));
+            
+            video.addEventListener('loadstart', function() {
+              console.log('Video load started');
+              loading.innerHTML = 'Loading video...';
+            });
+            
+            video.addEventListener('loadedmetadata', function() {
+              loading.style.display = 'none';
+              console.log('Video loaded successfully, duration:', video.duration);
+            });
+            
+            video.addEventListener('error', function(e) {
+              console.error('Video error:', e);
+              console.error('Video error details:', video.error);
+              loading.innerHTML = 'Error loading video. Check console for details.';
+            });
+            
+            video.addEventListener('canplay', function() {
+              loading.style.display = 'none';
+              console.log('Video can start playing');
+            });
+            
+            video.addEventListener('loadeddata', function() {
+              console.log('Video data loaded');
+            });
+            
+            // Try to play the video after a short delay
+            setTimeout(function() {
+              video.play().then(function() {
+                console.log('Video started playing');
+                loading.style.display = 'none';
+              }).catch(function(error) {
+                console.log('Autoplay prevented:', error);
+                loading.innerHTML = 'Click play to start video';
+              });
+            }, 500);
+          </script>
+        </body>
+        </html>
+      `);
+      popup.document.close();
+      
+      // Clean up the URL when popup is closed
+      popup.addEventListener('beforeunload', () => {
+        URL.revokeObjectURL(videoUrl);
+      });
+    } else {
+      alert('Popup blocked! Please allow popups for this site to view videos.');
+    }
   };
 
   if (videoFiles.length === 0) {
@@ -40,7 +180,6 @@ const VideoGallery = ({ videoFiles, onPlay, onPause, onDownload, onRemove, onPre
       
       <div className="space-y-1 max-h-20 overflow-y-auto">
         {videoFiles.map((file, index) => {
-          const isCurrentlyPlaying = currentPlayingId === file.id;
           const isVideo = file.type?.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv)$/i.test(file.name);
           
           if (!isVideo) return null;
@@ -49,15 +188,11 @@ const VideoGallery = ({ videoFiles, onPlay, onPause, onDownload, onRemove, onPre
             <div
               key={file.id || index}
               className="flex items-center gap-1.5 p-1.5 bg-gray-50/80 rounded-md border border-gray-200/50 hover:bg-gray-100/80 transition-colors cursor-pointer group"
-              onClick={() => isCurrentlyPlaying ? onPause() : onPlay(file)}
+              onClick={() => openVideoInPopup(file)}
             >
-              {/* Play/Pause Button */}
+              {/* Play Button */}
               <div className="flex items-center justify-center w-5 h-5 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors flex-shrink-0">
-                {isCurrentlyPlaying ? (
-                  <PauseIcon className="w-2.5 h-2.5" />
-                ) : (
-                  <PlayIcon className="w-2.5 h-2.5 ml-0.5" />
-                )}
+                <PlayIcon className="w-2.5 h-2.5 ml-0.5" />
               </div>
 
               {/* File Info */}
@@ -73,11 +208,6 @@ const VideoGallery = ({ videoFiles, onPlay, onPause, onDownload, onRemove, onPre
                   >
                     {file.name || file.originalName || 'Unknown file'}
                   </button>
-                  {isCurrentlyPlaying && (
-                    <span className="text-xs bg-red-100 text-red-800 px-1 py-0.5 rounded-full">
-                      Playing
-                    </span>
-                  )}
                 </div>
                 <div className="text-xs text-gray-500 truncate">
                   {formatFileSize(file.size || file.fileSize || 0)} • {file.type || file.mimeType || 'video/*'}

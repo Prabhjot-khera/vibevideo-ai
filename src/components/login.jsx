@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { UserIcon, KeyIcon, VideoIcon, ScissorsIcon, PaletteIcon } from 'lucide-react';
-import atlasService from '../services/atlasService';
 
 const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
   const [formData, setFormData] = useState({
@@ -16,28 +15,28 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
   // Quotes array with video editing testimonials
   const quotes = [
     {
-      text: "This video editor has transformed how I create content. The AI suggestions are incredibly helpful!",
+      text: "The background noise removal feature is incredible - my audio quality improved dramatically!",
       author: "Content Creator"
     },
     {
-      text: "The speed adjustment and cutting features saved me hours of work on my latest project.",
+      text: "Merging multiple videos together has never been this easy. Perfect for my compilation videos.",
       author: "Video Producer"
     },
     {
-      text: "As a beginner, the guided suggestions helped me learn professional editing techniques quickly.",
+      text: "The grayscale conversion gives my videos that perfect cinematic look I was going for.",
       author: "Aspiring Editor"
     },
     {
-      text: "The audio enhancement feature is a game-changer for my podcast videos.",
-      author: "Podcast Host"
+      text: "As a beginner, the guided suggestions helped me learn professional editing techniques quickly.",
+      author: "Digital Artist"
     },
     {
       text: "I can now create professional-looking videos without expensive software or complex training.",
       author: "Small Business Owner"
     },
     {
-      text: "The grayscale conversion and clip combining features are exactly what I needed for my art project.",
-      author: "Digital Artist"
+      text: "The AI-powered editing suggestions combined with easy merging and effects saved me hours.",
+      author: "Podcast Host"
     }
   ];
 
@@ -95,14 +94,27 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
           return;
         }
         
-        // Register user with MongoDB Atlas
-        const registerResult = await atlasService.register(username, email, password);
+        // Check if user already exists (localStorage)
+        const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
+        const userExists = existingUsers.find(user => user.username === username || user.email === email);
         
-        if (!registerResult.success) {
+        if (userExists) {
           setLoginStatus('error');
-          setStatusMessage(registerResult.error || 'Registration failed.');
+          setStatusMessage('Username or email already exists.');
           return;
         }
+        
+        // Create new user
+        const newUser = {
+          id: Date.now(),
+          username,
+          email,
+          password, // In production, this would be hashed
+          createdAt: new Date().toISOString()
+        };
+        
+        existingUsers.push(newUser);
+        localStorage.setItem('users', JSON.stringify(existingUsers));
         
         console.log('Account created successfully');
         setLoginStatus('success');
@@ -117,7 +129,7 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
         }, 2000);
         
       } else {
-        // Handle login with MongoDB
+        // Handle login with local storage
         const { username, password } = formData;
         
         if (!username || !password) {
@@ -126,33 +138,30 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
           return;
         }
         
-        // Authenticate with MongoDB Atlas
-        const loginResult = await atlasService.login(username, password);
+        // Authenticate with local storage
+        const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
+        const user = existingUsers.find(u => u.username === username && u.password === password);
         
-        if (loginResult.success) {
-          console.log('Atlas login successful:', loginResult.user);
+        if (user) {
+          console.log('Local storage login successful');
           setLoginStatus('success');
-          setStatusMessage('Login successful! Loading your data...');
+          setStatusMessage('Login successful!');
           
-          // Store current user session with Atlas data
+          // Store current user session
           localStorage.setItem('currentUser', JSON.stringify({
-            username: loginResult.user.username,
-            email: loginResult.user.email,
-            createdAt: loginResult.user.createdAt
+            username: user.username,
+            email: user.email,
+            createdAt: user.createdAt
           }));
-          
-          // Store user's chats and library items
-          localStorage.setItem('userChats', JSON.stringify(loginResult.chats));
-          localStorage.setItem('userLibrary', JSON.stringify(loginResult.library_items));
           
           // Brief delay for user to see success message
           setTimeout(() => {
-            onLogin(loginResult.user.username, loginResult.chats, loginResult.library_items);
+            onLogin(user.username, [], []);
             onClose();
           }, 1000);
         } else {
           setLoginStatus('error');
-          setStatusMessage(loginResult.error || 'Invalid username or password.');
+          setStatusMessage('Invalid username or password.');
         }
       }
     } catch (error) {
@@ -219,8 +228,8 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
                 <VideoIcon className="h-4 w-4 text-white" />
               </div>
               <div>
-                <h4 className="text-sm font-medium text-gray-800">AI-Powered Editing</h4>
-                <p className="text-xs text-gray-600">Get intelligent suggestions for video speed, cuts, and enhancements</p>
+                <h4 className="text-sm font-medium text-gray-800">Background Noise Removal</h4>
+                <p className="text-xs text-gray-600">Enhance audio quality by automatically removing background noise</p>
               </div>
             </div>
             
@@ -229,8 +238,8 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
                 <ScissorsIcon className="h-4 w-4 text-white" />
               </div>
               <div>
-                <h4 className="text-sm font-medium text-gray-800">Smart Cutting</h4>
-                <p className="text-xs text-gray-600">Automatically suggest optimal cut points and time intervals</p>
+                <h4 className="text-sm font-medium text-gray-800">Video & Audio Merging</h4>
+                <p className="text-xs text-gray-600">Seamlessly combine multiple videos and audio files together</p>
               </div>
             </div>
             
@@ -239,8 +248,8 @@ const Login = ({ onLogin, onClose, showSignup, onToggleSignup }) => {
                 <PaletteIcon className="h-4 w-4 text-white" />
               </div>
               <div>
-                <h4 className="text-sm font-medium text-gray-800">Visual Effects</h4>
-                <p className="text-xs text-gray-600">Apply grayscale, color adjustments, and other effects with ease</p>
+                <h4 className="text-sm font-medium text-gray-800">Grayscale Conversion</h4>
+                <p className="text-xs text-gray-600">Apply cinematic grayscale effects and other visual enhancements</p>
               </div>
             </div>
           </div>
